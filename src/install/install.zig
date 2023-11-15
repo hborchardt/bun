@@ -8196,6 +8196,7 @@ pub const PackageManager = struct {
                         &lockfile,
                         &root,
                         &maybe_root,
+                        false,
                         if (manager.to_update) manager.package_json_updates else null,
                         mapping,
                     );
@@ -8205,6 +8206,17 @@ pub const PackageManager = struct {
                     if (manager.options.enable.frozen_lockfile and had_any_diffs) {
                         if (comptime log_level != .silent) {
                             Output.prettyErrorln("<r><red>error<r>: lockfile had changes, but lockfile is frozen", .{});
+                            try Package.Diff.generate(
+                                ctx.allocator,
+                                ctx.log,
+                                manager.lockfile,
+                                &lockfile,
+                                &root,
+                                &maybe_root,
+                                true,
+                                if (manager.to_update) manager.package_json_updates else null,
+                                mapping,
+                            );
                         }
                         Global.crash();
                     }

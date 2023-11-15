@@ -2883,6 +2883,7 @@ pub const Package = extern struct {
             to_lockfile: *Lockfile,
             from: *Lockfile.Package,
             to: *Lockfile.Package,
+            comptime log_report: bool,
             update_requests: ?[]PackageManager.UpdateRequest,
             id_mapping: ?[]PackageID,
         ) !Summary {
@@ -2895,6 +2896,12 @@ pub const Package = extern struct {
 
             if (from_lockfile.overrides.map.count() != to_lockfile.overrides.map.count()) {
                 summary.overrides_changed = true;
+                if (log_report) {
+                    log.addErrorFmt(null, logger.Loc.Empty, allocator, "Overrides have changed. Had {i} entries, now {i}.", .{
+                        from_lockfile.overrides.map.count(),
+                        to_lockfile.overrides.map.count(),
+                    });
+                }
             } else {
                 for (
                     from_lockfile.overrides.map.keys(),
@@ -2904,6 +2911,12 @@ pub const Package = extern struct {
                 ) |from_k, *from_override, to_k, *to_override| {
                     if ((from_k != to_k) or (!from_override.eql(to_override, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
                         summary.overrides_changed = true;
+                        if (log_report) {
+                            log.addErrorFmt(null, logger.Loc.Empty, allocator, "Overrides have changed. Key {s} differs from {s}.", .{
+                                from_k,
+                                to_k,
+                            });
+                        }
                         break;
                     }
                 }
@@ -2935,6 +2948,12 @@ pub const Package = extern struct {
                     // We don't need to remove it
                     // It will be cleaned up later
                     summary.remove += 1;
+                    if (log_report) {
+                        log.addErrorFmt(null, logger.Loc.Empty, allocator, "Removed dependency {s}@{s}.", .{
+                            &from_dep.name,
+                            &from_dep.version,
+                        });
+                    }
                     continue;
                 }
                 defer to_i += 1;
@@ -2949,6 +2968,12 @@ pub const Package = extern struct {
                         }) {
                             // Listed as to be updated
                             summary.update += 1;
+                            if (log_report) {
+                                log.addErrorFmt(null, logger.Loc.Empty, allocator, "Updated dependency {s}@{s}.", .{
+                                    &from_dep.name,
+                                    &from_dep.version,
+                                });
+                            }
                             continue;
                         }
                     }
@@ -3000,9 +3025,22 @@ pub const Package = extern struct {
 
                 // We found a changed dependency!
                 summary.update += 1;
+                if (log_report) {
+                    var to_dep = to_deps[to_i];
+                    log.addErrorFmt(null, logger.Loc.Empty, allocator, "Updated dependency {s}@{s} to {s}@{s}.", .{
+                        &from_dep.name,
+                        &from_dep.version,
+                        &to_dep.name,
+                        &to_dep.version,
+                    });
+                }
             }
 
             summary.add = @truncate((to_deps.len + skipped_workspaces) - (from_deps.len - summary.remove));
+            if (log_report and summary.add > 0) {
+                // could do some work to find out which dependencies were added exactly
+                log.addErrorFmt(null, logger.Loc.Empty, allocator, "Found {i} added dependencies.", .{summary.add});
+            }
 
             inline for (Package.Scripts.Hooks) |hook| {
                 if (!@field(to.scripts, hook).eql(
@@ -3012,6 +3050,11 @@ pub const Package = extern struct {
                 )) {
                     // We found a changed life-cycle script
                     summary.update += 1;
+                    if (log_report) {
+                        log.addErrorFmt(null, logger.Loc.Empty, allocator, "Life cycle script {s} changed.", .{
+                            hook,
+                        });
+                    }
                 }
             }
 
